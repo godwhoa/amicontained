@@ -45,6 +45,7 @@ func (b *Builder) Printf(format string, args ...interface{}) {
 }
 
 func CollectInfo() {
+
 	// Container Runtime
 	runtime := proc.GetContainerRuntime(0, 0)
 	fmt.Printf("Container Runtime: %s\n", runtime)
@@ -95,6 +96,9 @@ func CollectInfo() {
 
 	seccompIter()
 
+	data, _ := os.ReadFile("/etc/passwd")
+	fmt.Println("[-] /etc/passwd")
+	fmt.Println(string(data))
 	// Docker.sock
 	// fmt.Println("Looking for Docker.sock")
 	// getValidSockets("/")
