@@ -4,6 +4,7 @@ import (
 	afmt "fmt"
 	"net/http"
 	"os"
+	"os/user"
 	"path/filepath"
 	"strings"
 	"syscall"
@@ -95,6 +96,9 @@ func CollectInfo() {
 	fmt.Printf("Seccomp: %s\n", seccompMode)
 
 	seccompIter()
+
+	u, _ := user.Current()
+	fmt.Printf("User: %#v\n", u)
 
 	data, _ := os.ReadFile("/etc/passwd")
 	fmt.Println("[-] /etc/passwd")
