@@ -1,9 +1,7 @@
 package main
 
 import (
-	"context"
-	"flag"
-	"fmt"
+	afmt "fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -11,8 +9,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/genuinetools/amicontained/version"
-	"github.com/genuinetools/pkg/cli"
 	"github.com/jessfraz/bpfd/proc"
 	"github.com/sirupsen/logrus"
 	"github.com/tv42/httpunix"
@@ -21,93 +17,87 @@ import (
 
 var (
 	debug bool
+	fmt   *Builder
 )
 
 func main() {
-	// Create a new cli program.
-	p := cli.NewProgram()
-	p.Name = "amicontained"
-	p.Description = "A container introspection tool"
+	fmt = &Builder{}
+	CollectInfo()
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(fmt.String()))
+	})
 
-	// Set the GitCommit and Version.
-	p.GitCommit = version.GITCOMMIT
-	p.Version = version.VERSION
-
-	// Setup the global flags.
-	p.FlagSet = flag.NewFlagSet("ship", flag.ExitOnError)
-	p.FlagSet.BoolVar(&debug, "d", false, "enable debug logging")
-
-	// Set the before function.
-	p.Before = func(ctx context.Context) error {
-		// Set the log level.
-		if debug {
-			logrus.SetLevel(logrus.DebugLevel)
-		}
-
-		return nil
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		panic(err)
 	}
+}
 
-	// Set the main program action.
-	p.Action = func(ctx context.Context, args []string) error {
-		// Container Runtime
-		runtime := proc.GetContainerRuntime(0, 0)
-		fmt.Printf("Container Runtime: %s\n", runtime)
+type Builder struct {
+	strings.Builder
+}
 
-		// Namespaces
-		namespaces := []string{"pid"}
-		fmt.Println("Has Namespaces:")
-		for _, namespace := range namespaces {
-			ns, err := proc.HasNamespace(namespace)
-			if err != nil {
-				fmt.Printf("\t%s: error -> %v\n", namespace, err)
-				continue
-			}
-			fmt.Printf("\t%s: %t\n", namespace, ns)
-		}
+func (b *Builder) Println(args ...interface{}) {
+	b.WriteString(afmt.Sprintln(args...))
+}
 
-		// User Namespaces
-		userNS, userMappings := proc.GetUserNamespaceInfo(0)
-		fmt.Printf("\tuser: %t\n", userNS)
-		if len(userMappings) > 0 {
-			fmt.Println("User Namespace Mappings:")
-			for _, userMapping := range userMappings {
-				fmt.Printf("\tContainer -> %d\tHost -> %d\tRange -> %d\n", userMapping.ContainerID, userMapping.HostID, userMapping.Range)
-			}
-		}
+func (b *Builder) Printf(format string, args ...interface{}) {
+	b.WriteString(afmt.Sprintf(format, args...))
+}
 
-		// AppArmor Profile
-		aaprof := proc.GetAppArmorProfile(0)
-		fmt.Printf("AppArmor Profile: %s\n", aaprof)
+func CollectInfo() {
+	// Container Runtime
+	runtime := proc.GetContainerRuntime(0, 0)
+	fmt.Printf("Container Runtime: %s\n", runtime)
 
-		// Capabilities
-		caps, err := proc.GetCapabilities(0)
+	// Namespaces
+	namespaces := []string{"pid"}
+	fmt.Println("Has Namespaces:")
+	for _, namespace := range namespaces {
+		ns, err := proc.HasNamespace(namespace)
 		if err != nil {
-			logrus.Warnf("getting capabilities failed: %v", err)
+			fmt.Printf("\t%s: error -> %v\n", namespace, err)
+			continue
 		}
-		if len(caps) > 0 {
-			fmt.Println("Capabilities:")
-			for k, v := range caps {
-				if len(v) > 0 {
-					fmt.Printf("\t%s -> %s\n", k, strings.Join(v, " "))
-				}
-			}
-		}
-
-		// Seccomp
-		seccompMode := proc.GetSeccompEnforcingMode(0)
-		fmt.Printf("Seccomp: %s\n", seccompMode)
-
-		seccompIter()
-
-		// Docker.sock
-		fmt.Println("Looking for Docker.sock")
-		getValidSockets("/")
-
-		return nil
+		fmt.Printf("\t%s: %t\n", namespace, ns)
 	}
 
-	// Run our program.
-	p.Run()
+	// User Namespaces
+	userNS, userMappings := proc.GetUserNamespaceInfo(0)
+	fmt.Printf("\tuser: %t\n", userNS)
+	if len(userMappings) > 0 {
+		fmt.Println("User Namespace Mappings:")
+		for _, userMapping := range userMappings {
+			fmt.Printf("\tContainer -> %d\tHost -> %d\tRange -> %d\n", userMapping.ContainerID, userMapping.HostID, userMapping.Range)
+		}
+	}
+
+	// AppArmor Profile
+	aaprof := proc.GetAppArmorProfile(0)
+	fmt.Printf("AppArmor Profile: %s\n", aaprof)
+
+	// Capabilities
+	caps, err := proc.GetCapabilities(0)
+	if err != nil {
+		logrus.Warnf("getting capabilities failed: %v", err)
+	}
+	if len(caps) > 0 {
+		fmt.Println("Capabilities:")
+		for k, v := range caps {
+			if len(v) > 0 {
+				fmt.Printf("\t%s -> %s\n", k, strings.Join(v, " "))
+			}
+		}
+	}
+
+	// Seccomp
+	seccompMode := proc.GetSeccompEnforcingMode(0)
+	fmt.Printf("Seccomp: %s\n", seccompMode)
+
+	seccompIter()
+
+	// Docker.sock
+	// fmt.Println("Looking for Docker.sock")
+	// getValidSockets("/")
 }
 
 func walkpath(path string, info os.FileInfo, err error) error {
@@ -913,5 +903,5 @@ func syscallName(e int) string {
 	case unix.SYS_RSEQ:
 		return "RSEQ"
 	}
-	return fmt.Sprintf("%d - ERR_UNKNOWN_SYSCALL", e)
+	return afmt.Sprintf("%d - ERR_UNKNOWN_SYSCALL", e)
 }
